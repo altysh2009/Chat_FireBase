@@ -3,8 +3,6 @@ package com.google.firebase.udacity.friendlychat;
 import android.app.Activity;
 import android.content.Context;
 import android.media.MediaPlayer;
-import android.media.TimedText;
-import android.net.Uri;
 import android.support.constraint.ConstraintLayout;
 import android.util.Log;
 import android.view.View;
@@ -19,8 +17,6 @@ import com.bumptech.glide.Glide;
 
 import java.io.IOException;
 import java.util.List;
-
-import static android.R.id.message;
 
 public class MessageAdapter extends ArrayAdapter<FriendlyMessage> {
     MediaPlayer mediaPlayer = null;
@@ -66,6 +62,7 @@ public class MessageAdapter extends ArrayAdapter<FriendlyMessage> {
                     if (mediaPlayer == null)
                     {
                         mediaPlayer = new MediaPlayer();
+
                         Log.d(" cccccc", "onClick: "+message.getAudioUrl());
                         try {
                            // Log.d(" cccccc", "onClick: "+message.getAudioUrl());
