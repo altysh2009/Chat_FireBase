@@ -15,6 +15,7 @@
  */
 package com.google.firebase.udacity.friendlychat.data;
 
+import android.net.Uri;
 import android.provider.BaseColumns;
 
 /**
@@ -22,6 +23,7 @@ import android.provider.BaseColumns;
  * the code organized.
  */
 public class DataContract {
+    public static final Uri uri = Uri.parse("content://com.google.firebase.udacity.friendlychat.data");
 
     /* Inner class that defines the table contents of the weather table */
     public static final class DataEntry implements BaseColumns {

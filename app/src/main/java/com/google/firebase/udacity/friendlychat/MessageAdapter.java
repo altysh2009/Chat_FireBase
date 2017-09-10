@@ -1,12 +1,13 @@
 package com.google.firebase.udacity.friendlychat;
 
 import android.app.Activity;
+import android.content.ContentValues;
 import android.content.Context;
+import android.database.Cursor;
 import android.media.MediaPlayer;
 import android.os.Handler;
 import android.support.annotation.NonNull;
 import android.support.constraint.ConstraintLayout;
-import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
@@ -23,38 +24,24 @@ import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.firebase.storage.FileDownloadTask;
 import com.google.firebase.storage.FirebaseStorage;
 import com.google.firebase.storage.StorageReference;
+import com.google.firebase.udacity.friendlychat.data.DataContract;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
 
 public class MessageAdapter extends ArrayAdapter<FriendlyMessage> {
-    static FirebaseStorage mFirebaseStorage;
-    ArrayList<String> paths = new ArrayList<>();
-    ArrayList<String> poston = new ArrayList<>();
-    MediaPlayer mediaPlayer = null;
-    SeekBar seekBar;
-    boolean downloaded = false;
-    TextView dur;
-    ImageButton play;
+    private static FirebaseStorage mFirebaseStorage;
+    media m;
     int pos;
+    String candidateChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890";
+    private MediaPlayer mediaPlayer = null;
+    private boolean downloaded = false;
     private Handler mHandler = new Handler();
-    Runnable updateSeekBarTime = new Runnable() {
-        public void run() {
 
-            //get current position
-            int timeElapsed = mediaPlayer.getCurrentPosition();
-
-            //set seekbar progress using time played
-            seekBar.setProgress(timeElapsed / 1000);
-            Log.d("run", "run: ");
-            mHandler.postDelayed(this, 500);
-        }
-    };
-    public MessageAdapter(Context context, int resource, List<FriendlyMessage> objects) {
+    public MessageAdapter(Context context, int resource, List<FriendlyMessage> objects, media m) {
         super(context, resource, objects);
-
+        this.m = m;
 
         if (mFirebaseStorage == null)
             mFirebaseStorage = FirebaseStorage.getInstance();
@@ -70,10 +57,11 @@ public class MessageAdapter extends ArrayAdapter<FriendlyMessage> {
         TextView messageTextView = (TextView) convertView.findViewById(R.id.messageTextView);
         TextView authorTextView = (TextView) convertView.findViewById(R.id.nameTextView);
         ConstraintLayout audio = (ConstraintLayout)convertView.findViewById(R.id.audio);
+        final ImageButton play;
         play = (ImageButton) convertView.findViewById(R.id.play);
-        seekBar = (SeekBar) convertView.findViewById(R.id.seekBar);
+        final SeekBar seekBar = (SeekBar) convertView.findViewById(R.id.seekBar);
         final ProgressBar progressbar = (ProgressBar) convertView.findViewById(R.id.progressBar2);
-        dur = (TextView) convertView.findViewById(R.id.durtation);
+        final TextView dur = (TextView) convertView.findViewById(R.id.durtation);
 
         final FriendlyMessage message = getItem(position);
 
@@ -86,13 +74,11 @@ public class MessageAdapter extends ArrayAdapter<FriendlyMessage> {
                     .load(message.getPhotoUrl())
                     .into(photoImageView);
         } else if (message.getAudioUrl() !=null){
-            if (!poston.contains(position + "")) {
+            if (true) {
                 StorageReference storageRef = mFirebaseStorage.getReferenceFromUrl(message.getAudioUrl());
                 try {
                     progressbar.setVisibility(View.VISIBLE);
-//                play.setVisibility(View.INVISIBLE);
-//                seekBar.setVisibility(View.INVISIBLE);
-//                dur.setVisibility(View.INVISIBLE);
+//
 
                     final String u = message.getAudioUrl().replace("-", "").substring(message.getAudioUrl().length() - 33);
                     final File localFile = File.createTempFile(u, ".3gpp");
@@ -105,40 +91,68 @@ public class MessageAdapter extends ArrayAdapter<FriendlyMessage> {
                         @Override
                         public void onSuccess(FileDownloadTask.TaskSnapshot taskSnapshot) {
                             // Local temp file has been
-                            play.setVisibility(View.VISIBLE);
-                            seekBar.setVisibility(View.VISIBLE);
-                            dur.setVisibility(View.VISIBLE);
+
                             progressbar.setVisibility(View.INVISIBLE);
                             downloaded = true;
-                            paths.add(localFile.getPath());
-                            poston.add(position + "");
-                            pos = position;
-                            done(message);
+                            ContentValues c = new ContentValues();
+                            c.put(DataContract.DataEntry.AudioId, u);
+                            c.put(DataContract.DataEntry.AudioPath, localFile.getPath());
+                            c.put(DataContract.DataEntry.AudioLink, message.getAudioUrl());
+                            getContext().getContentResolver().insert(DataContract.uri, c);
+                            Cursor cc = getContext().getContentResolver().query(DataContract.uri, null, DataContract.DataEntry.AudioLink + "=?", new String[]{message.getAudioUrl()}, null);
+
+                            cc.moveToNext();
+
+                            final String u = cc.getString(cc.getColumnIndex(DataContract.DataEntry.AudioPath));
+
+                            play.setOnClickListener(new View.OnClickListener() {
+                                @Override
+                                public void onClick(View v) {
+                                    Toast.makeText(getContext(), "to  ", Toast.LENGTH_LONG).show();
+                                    m.onlClick(u, seekBar, dur, play);
+
+                                }
+                            });
+                            cc.close();
+
+
 
                         }
                     }).addOnFailureListener(new OnFailureListener() {
                         @Override
                         public void onFailure(@NonNull Exception exception) {
                             // Handle any errors
-                            play.setVisibility(View.INVISIBLE);
-                            progressbar.setVisibility(View.INVISIBLE);
-                            seekBar.setVisibility(View.INVISIBLE);
+
                             dur.setText(R.string.error);
                             dur.setVisibility(View.VISIBLE);
                             downloaded = false;
-                            Log.e("tag", "onFailure: ", exception);
+
                         }
                     });
                 } catch (RuntimeException | IOException e) {
                     e.printStackTrace();
-                    play.setVisibility(View.INVISIBLE);
-                    progressbar.setVisibility(View.INVISIBLE);
-                    seekBar.setVisibility(View.INVISIBLE);
+
                     dur.setVisibility(View.VISIBLE);
                     dur.setText(R.string.error);
                     downloaded = false;
                 }
-            } else done(message);
+            } else {
+                Cursor c = getContext().getContentResolver().query(DataContract.uri, null, DataContract.DataEntry.AudioLink + "=?", new String[]{message.getAudioUrl()}, null);
+
+                c.moveToNext();
+
+                final String u = c.getString(c.getColumnIndex(DataContract.DataEntry.AudioPath));
+
+                play.setOnClickListener(new View.OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        Toast.makeText(getContext(), "to  ", Toast.LENGTH_LONG).show();
+                        m.onlClick(u, seekBar, dur, play);
+
+                    }
+                });
+                c.close();
+            }
             messageTextView.setVisibility(View.GONE);
             photoImageView.setVisibility(View.GONE);
             audio.setVisibility(View.VISIBLE);
@@ -155,87 +169,20 @@ public class MessageAdapter extends ArrayAdapter<FriendlyMessage> {
         return convertView;
     }
 
-    void done(FriendlyMessage message) {
-        play.setVisibility(View.VISIBLE);
-        seekBar.setVisibility(View.VISIBLE);
-        dur.setVisibility(View.VISIBLE);
-        mediaPlayer = new MediaPlayer();
-        final String u = paths.get(poston.indexOf(pos + ""));
-        Toast.makeText(getContext(), u, Toast.LENGTH_SHORT).show();
-        try {
-            mediaPlayer.setDataSource(u);
-            mediaPlayer.prepare();
-
-            int i = mediaPlayer.getDuration();
-            seekBar.setMax(i / 1000);
-
-
-            long second = (i / 1000) % 60;
-            long minute = (i / (1000 * 60)) % 60;
-
-
-            String time = String.format("%02d:%02d", minute, second);
-
-
-            dur.setText(String.valueOf(time));
-            play.setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View v) {
-                    if (mediaPlayer == null) {
-                        mediaPlayer = new MediaPlayer();
-                        try {
-                            mediaPlayer.setDataSource(u);
-                            mediaPlayer.prepare();
-                        } catch (IOException e) {
-                            e.printStackTrace();
-                        }
-                    }
-                    if (mediaPlayer != null && !mediaPlayer.isPlaying()) {
-
-                        // mHandler.post(updateSeekBarTime);
-                        mediaPlayer.start();
-                        //updateSeekBarTime.run();
-                        mediaPlayer.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
-                            @Override
-                            public void onCompletion(MediaPlayer mp) {
-                                try {
-                                    mHandler.removeCallbacks(updateSeekBarTime);
-                                    mediaPlayer.stop();
-                                    mediaPlayer.release();
-                                    mediaPlayer = null;
-                                    play.setImageResource(R.drawable.play);
-
-                                } catch (RuntimeException e) {
-                                    e.printStackTrace();
-                                }
-                            }
-                        });
-                        play.setImageResource(R.drawable.stop);
+    private void done(FriendlyMessage message) {
 
 
 
-                    }
-                    else {
-                        try {
-                            mediaPlayer.stop();
-                            mediaPlayer.release();
-                            mHandler.removeCallbacks(updateSeekBarTime);
 
-                            mediaPlayer = null;
-                            play.setImageResource(R.drawable.play);
-                        }catch (RuntimeException e) {
-                            e.printStackTrace();
-                        }
-
-                    }
-                }
-            });
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
     }
 
     public interface media {
-        void onClick(String path);
+        void onlClick(String path, SeekBar seekbar, TextView textview, ImageButton play);
     }
 }
+
+
+
+
+
+

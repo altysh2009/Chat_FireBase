@@ -16,9 +16,11 @@
 package com.google.firebase.udacity.friendlychat;
 
 import android.content.Intent;
+import android.media.MediaPlayer;
 import android.media.MediaRecorder;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
 import android.support.annotation.NonNull;
 import android.support.v7.app.AppCompatActivity;
 import android.text.Editable;
@@ -34,6 +36,8 @@ import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.ListView;
 import android.widget.ProgressBar;
+import android.widget.SeekBar;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import com.firebase.ui.auth.AuthUI;
@@ -56,8 +60,9 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends AppCompatActivity implements MessageAdapter.media {
     public static final String ANONYMOUS = "anonymous";
     public static final int DEFAULT_MSG_LENGTH_LIMIT = 1000;
     private static final int RC_SIGN_IN = 123;
@@ -73,6 +78,7 @@ public class MainActivity extends AppCompatActivity {
     StorageReference mStorageReference;
     StorageReference mStorgeRef_Audio;
     boolean recording = false;
+    String candidateChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890";
     private ChildEventListener childEventListener;
     private ListView mMessageListView;
     private MessageAdapter mMessageAdapter;
@@ -85,6 +91,22 @@ public class MainActivity extends AppCompatActivity {
     private  FirebaseAuth.AuthStateListener mAuthStateListener;
     private MediaRecorder myRecorder;
     private String outputFile = null;
+    private MediaPlayer media;
+    private Handler mHandler = new Handler();
+    private SeekBar seekBar;
+    Runnable updateSeekBarTime = new Runnable() {
+        public void run() {
+
+            //get current position
+            int timeElapsed = media
+                    .getCurrentPosition();
+
+            //set seekbar progress using time played
+            seekBar.setProgress(timeElapsed / 1000);
+            Log.d("run", "run: ");
+            mHandler.postDelayed(this, 500);
+        }
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -114,7 +136,7 @@ public class MainActivity extends AppCompatActivity {
 
         // Initialize message ListView and its adapter
         List<FriendlyMessage> friendlyMessages = new ArrayList<>();
-        mMessageAdapter = new MessageAdapter(this, R.layout.item_message, friendlyMessages);
+        mMessageAdapter = new MessageAdapter(MainActivity.this, R.layout.item_message, friendlyMessages, this);
         mMessageListView.setAdapter(mMessageAdapter);
 
 
@@ -222,7 +244,11 @@ public class MainActivity extends AppCompatActivity {
                    recording = false;
                    //Log.d(TAG, "onClick: true");
                }else {
-                   outputFile = "/javacodegeeksRecording.3gpp";
+                   StringBuilder s = new StringBuilder();
+                   Random random = new Random();
+                   for (int i = 0; i < candidateChars.length(); i++)
+                       s.append(candidateChars.charAt(random.nextInt(candidateChars.length())));
+                   outputFile = "/" + s.toString() + ".3gpp";
                    myRecorder = new MediaRecorder();
                    myRecorder.setAudioSource(MediaRecorder.AudioSource.MIC);
                    myRecorder.setOutputFormat(MediaRecorder.OutputFormat.THREE_GPP);
@@ -371,5 +397,58 @@ public class MainActivity extends AppCompatActivity {
 
         }
         super.onActivityResult(requestCode, resultCode, data);
+    }
+
+    @Override
+    public void onlClick(String path, SeekBar seekbar, TextView textview, final ImageButton play) {
+        if (media == null)
+            media = new MediaPlayer();
+        if (media.isPlaying()) {
+            media.stop();
+            media.release();
+            mHandler.removeCallbacks(updateSeekBarTime);
+            play.setImageResource(R.drawable.play);
+            media = new MediaPlayer();
+        } else {
+            try {
+                media.setDataSource(path);
+                media.prepare();
+                int i = media.getDuration();
+
+                seekbar.setMax(i / 1000);
+
+
+                long second = (i / 1000) % 60;
+                long minute = (i / (1000 * 60)) % 60;
+
+
+                String time = String.format("%02d:%02d", minute, second);
+
+
+                textview.setText(String.valueOf(time));
+                seekBar = seekbar;
+                mHandler.post(updateSeekBarTime);
+                updateSeekBarTime.run();
+                play.setImageResource(R.drawable.stop);
+                media.start();
+                media.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
+                    @Override
+                    public void onCompletion(MediaPlayer mp) {
+                        try {
+                            mHandler.removeCallbacks(updateSeekBarTime);
+                            media.stop();
+                            media.release();
+                            media = null;
+                            play.setImageResource(R.drawable.play);
+
+                        } catch (RuntimeException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                });
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
     }
 }
