@@ -19,7 +19,6 @@ import android.content.Intent;
 import android.media.MediaRecorder;
 import android.net.Uri;
 import android.os.Bundle;
-import android.os.Environment;
 import android.support.annotation.NonNull;
 import android.support.v7.app.AppCompatActivity;
 import android.text.Editable;
@@ -29,7 +28,6 @@ import android.util.Log;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
-import android.view.MotionEvent;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
@@ -54,41 +52,40 @@ import com.google.firebase.storage.FirebaseStorage;
 import com.google.firebase.storage.StorageReference;
 import com.google.firebase.storage.UploadTask;
 
+import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.Objects;
 
 public class MainActivity extends AppCompatActivity {
-    private static final int RC_SIGN_IN = 123;
-    private static final String TAG = "MainActivity";
-
     public static final String ANONYMOUS = "anonymous";
     public static final int DEFAULT_MSG_LENGTH_LIMIT = 1000;
+    private static final int RC_SIGN_IN = 123;
+    private static final String TAG = "MainActivity";
+    private static final int RC_PHOTO_PICKER = 222;
+    final String Massage = "massage";
+    final String photo = "chat_photos";
+    ImageButton mPhotoPickerButton;
+    FirebaseDatabase mFireBase;
+    List<AuthUI.IdpConfig> providers;
+    ImageButton record;
+    FirebaseStorage mFirebaseStorage;
+    StorageReference mStorageReference;
+    StorageReference mStorgeRef_Audio;
+    boolean recording = false;
     private ChildEventListener childEventListener;
     private ListView mMessageListView;
     private MessageAdapter mMessageAdapter;
     private ProgressBar mProgressBar;
-     ImageButton mPhotoPickerButton;
     private EditText mMessageEditText;
     private Button mSendButton;
-     FirebaseDatabase mFireBase;
     private DatabaseReference mReference;
-    List<AuthUI.IdpConfig> providers;
     private String mUsername;
-     final String Massage = "massage";
-    private static final int RC_PHOTO_PICKER = 222;
     private FirebaseAuth mFirebaseAuth;
     private  FirebaseAuth.AuthStateListener mAuthStateListener;
     private MediaRecorder myRecorder;
     private String outputFile = null;
-    ImageButton record ;
-     FirebaseStorage mFirebaseStorage;
-     StorageReference mStorageReference;
-     final String photo = "chat_photos";
-    boolean recording = false;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -101,6 +98,7 @@ public class MainActivity extends AppCompatActivity {
         mFirebaseAuth = FirebaseAuth.getInstance();
         mFirebaseStorage = FirebaseStorage.getInstance();
         mStorageReference = mFirebaseStorage.getReference().child(photo);
+        mStorgeRef_Audio = mFirebaseStorage.getReference().child("audio");
         mReference = mFireBase.getReference().child(Massage);
         mReference.keepSynced(true);
         providers =  new ArrayList<>();
@@ -196,9 +194,30 @@ public class MainActivity extends AppCompatActivity {
                if (recording){
                    stoprecord();
                    record.setImageResource(R.drawable.microphone);
-                   FriendlyMessage friendlyMessage = new FriendlyMessage(null, null, null,outputFile);
-                   Log.d(TAG, "onClick: "+outputFile);
-                   mMessageAdapter.add(friendlyMessage);
+                   StorageReference storageReference = mStorgeRef_Audio.child(outputFile);
+
+                   UploadTask uploadTask = storageReference.putFile(Uri.fromFile(new File(getFilesDir() + outputFile)));
+
+// Register observers to listen for when the download is done or if it fails
+                   uploadTask.addOnFailureListener(new OnFailureListener() {
+                       @Override
+                       public void onFailure(@NonNull Exception exception) {
+                           // Handle unsuccessful uploads
+                           Log.e(TAG, "onFailure: ", exception);
+                           Toast.makeText(getApplicationContext(), "error Uploading", Toast.LENGTH_LONG).show();
+
+                       }
+                   }).addOnSuccessListener(new OnSuccessListener<UploadTask.TaskSnapshot>() {
+                       @Override
+                       public void onSuccess(UploadTask.TaskSnapshot taskSnapshot) {
+                           // taskSnapshot.getMetadata() contains file metadata such as size, content-type, and download URL.
+                           Uri downloadUrl = taskSnapshot.getDownloadUrl();
+                           FriendlyMessage friendlyMessage = new FriendlyMessage(null, mUsername, null, downloadUrl.toString());
+                           mReference.push().setValue(friendlyMessage);
+
+                       }
+                   });
+
 
                    recording = false;
                    //Log.d(TAG, "onClick: true");
@@ -209,7 +228,7 @@ public class MainActivity extends AppCompatActivity {
                    myRecorder.setOutputFormat(MediaRecorder.OutputFormat.THREE_GPP);
                    myRecorder.setAudioEncoder(MediaRecorder.AudioEncoder.AMR_NB);
                    Log.d(TAG, "onClick: "+outputFile);
-                   myRecorder.setOutputFile(getFilesDir()+"/javacodegeeksRecording.3gpp");
+                   myRecorder.setOutputFile(getFilesDir() + outputFile);
                    recorrd();
                    record.setImageResource(R.drawable.stop);
                    //Log.d(TAG, "onClick: false");
